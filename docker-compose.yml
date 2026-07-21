@@ -1,0 +1,83 @@
+services:
+  backend:
+    build: ./backend
+    container_name: neusoft-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/app:/app/app
+      - C:/Users/23317/.cache/huggingface:/home/appuser/.cache/huggingface
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      # Linux 容器不支持 Windows 语音引擎，使用 mock 模式
+      - STT_PROVIDER=mock
+      - TTS_PROVIDER=mock
+      # 使用宿主机的模型缓存（避免在容器内从 HF 下载）
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - HF_ENDPOINT=https://hf-mirror.com
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - neusoft-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build: ./frontend
+    container_name: neusoft-frontend
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - neusoft-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: neusoft-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    networks:
+      - neusoft-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: neusoft-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - neusoft-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  backend-data:
+  redis-data:
+
+networks:
+  neusoft-network:
+    driver: bridge
