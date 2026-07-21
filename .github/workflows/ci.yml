@@ -83,6 +83,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./backend
+          file: ./backend/Dockerfile.ci
           push: false
           load: true
           tags: pythonai-backend:latest
