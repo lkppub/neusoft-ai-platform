@@ -25,7 +25,7 @@ const routes = [
     children: [
       { path: '', redirect: '/conversations' },
       { path: 'conversations', name: 'Conversations', component: () => import('@/views/enterprise/ConversationView.vue'), meta: { roles: ['enterprise', 'admin', 'customer_service', 'decision_maker'] } },
-      { path: 'knowledge', name: 'KnowledgeQuery', component: () => import('@/views/enterprise/KnowledgeQueryView.vue'), meta: { roles: ['enterprise', 'customer_service', 'admin'] } },
+      { path: 'knowledge', name: 'KnowledgeQuery', component: () => import('@/views/enterprise/KnowledgeQueryView.vue'), meta: { roles: ['enterprise', 'customer_service', 'admin', 'decision_maker'] } },
       { path: 'tickets', name: 'Tickets', component: () => import('@/views/customer-service/TicketListView.vue'), meta: { roles: ['customer_service', 'admin', 'enterprise'] } },
       { path: 'tickets/:id', name: 'TicketDetail', component: () => import('@/views/customer-service/TicketDetailView.vue'), meta: { roles: ['customer_service', 'admin', 'enterprise'] } },
       { path: 'faq', name: 'FAQManagement', component: () => import('@/views/customer-service/FAQManagementView.vue'), meta: { roles: ['customer_service', 'admin'] } },

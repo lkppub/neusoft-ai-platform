@@ -10,7 +10,7 @@ from app.models.ticket import CustomerServiceTicket, TicketMessage, TicketMessag
 from app.schemas.ticket import (
     CreateTicketRequest, UpdateTicketRequest, AddTicketMessageRequest,
     TicketResponse, TicketListResponse, TicketMessageResponse,
-    ClassifyResponse, SuggestReplyResponse, ResolveTicketRequest,
+    ClassifyResponse, SuggestReplyResponse, ResolveTicketRequest, RateTicketRequest,
 )
 
 router = APIRouter(prefix="/tickets", tags=["客服工单"])
@@ -84,11 +84,20 @@ async def auto_classify_ticket(ticket_id: str) -> dict | None:
                     {"role": "user", "content": user_prompt},
                 ]
             else:
-                prompt = f"""请对以下客户工单进行分类：
+                prompt = f"""请对以下客户工单进行分类。你必须从下列分类中选择最匹配的一项：
+
+【可用分类】
+技术支持、账号问题、账单咨询、产品咨询、投诉建议、售后服务、功能需求、商务咨询、其他
+
+【规则】
+- category 必须严格从上述列表中选取，不得自创
+- 如果无法明确归入前8类，使用"其他"
+
+【工单信息】
 主题：{ticket.subject}
 描述：{ticket.description}
 
-请返回JSON格式：{{"category": "分类", "priority": "优先级(low/medium/high/urgent)", "sentiment": "情绪(positive/neutral/negative)", "key_details": "关键信息摘要"}}"""
+请返回JSON格式：{{"category": "上述分类之一", "sentiment": "positive/neutral/negative", "key_details": "关键信息摘要"}}"""
                 messages = [{"role": "user", "content": prompt}]
 
             _log.info("[auto_classify] 调用 AI 分类...")
@@ -99,11 +108,11 @@ async def auto_classify_ticket(ticket_id: str) -> dict | None:
             try:
                 classification = json.loads(response)
             except json.JSONDecodeError:
-                classification = {"category": "未分类", "priority": "medium", "sentiment": "neutral", "key_details": response[:200]}
+                classification = {"category": "未分类", "sentiment": "neutral", "key_details": response[:200]}
 
+            # 只更新分类信息，不修改优先级（优先级由用户创建工单时决定）
             ticket.problem_category = classification.get("category", "未分类")
             ticket.ai_classification = classification
-            ticket.priority = classification.get("priority", "medium")
             await db.commit()
 
             _log.info("[auto_classify] 工单 %s 分类完成: category=%s, priority=%s",
@@ -317,7 +326,6 @@ async def classify_ticket(
 
     return ClassifyResponse(
         category=classification.get("category", "未分类"),
-        priority=classification.get("priority", "medium"),
         sentiment=classification.get("sentiment", "neutral"),
         key_details=classification.get("key_details", ""),
     )
@@ -325,14 +333,12 @@ async def classify_ticket(
 
 # ── 分类关键词 → 模板名称关键词映射 ──
 CATEGORY_TEMPLATE_KEYWORDS = {
-    "退款": "退款",
-    "投诉": "投诉",
-    "技术": "技术",
-    "产品": "产品",
-    "账户": "账户",
-    "账号": "账户",
-    "账单": "账单",
-    "建议": "建议",
+    "技术支持": "技术支持",
+    "账号问题": "账号问题",
+    "账单咨询": "账单咨询",
+    "产品咨询": "产品咨询",
+    "投诉建议": "投诉建议",
+    "售后服务": "售后服务",
 }
 
 
@@ -454,6 +460,11 @@ async def resolve_ticket(
     ticket.final_reply = request.final_reply
     ticket.resolved_at = datetime.now(timezone.utc)
 
+    # 客服解决时可附带评分
+    if request.satisfaction_rating is not None:
+        ticket.satisfaction_rating = request.satisfaction_rating
+        ticket.satisfaction_comment = request.satisfaction_comment
+
     # Add resolution message
     msg = TicketMessage(
         ticket_id=ticket_id,
@@ -465,6 +476,32 @@ async def resolve_ticket(
     await db.flush()
 
     return {"message": "工单已解决", "ticket_id": ticket_id}
+
+
+@router.post("/{ticket_id}/rate")
+async def rate_ticket(
+    ticket_id: str,
+    request: RateTicketRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """客户评价已解决的工单（1-5 星）"""
+    result = await db.execute(select(CustomerServiceTicket).where(CustomerServiceTicket.id == ticket_id))
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    if ticket.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="只能评价自己的工单")
+
+    if ticket.status != TicketStatus.RESOLVED:
+        raise HTTPException(status_code=400, detail="只能评价已解决的工单")
+
+    ticket.satisfaction_rating = request.rating
+    ticket.satisfaction_comment = request.comment
+    await db.flush()
+
+    return {"message": "评价成功", "rating": request.rating}
 
 
 @router.get("/{ticket_id}/messages")

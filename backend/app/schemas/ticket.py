@@ -37,6 +37,8 @@ class TicketResponse(BaseModel):
     ai_reply_confidence: Optional[float] = None
     final_reply: Optional[str] = None
     resolved_at: Optional[datetime] = None
+    satisfaction_rating: Optional[int] = None   # 1-5 星
+    satisfaction_comment: Optional[str] = None  # 评价留言
     created_at: datetime
     updated_at: datetime
 
@@ -66,7 +68,6 @@ class TicketMessageResponse(BaseModel):
 
 class ClassifyResponse(BaseModel):
     category: str
-    priority: str
     sentiment: str
     key_details: str
 
@@ -76,8 +77,16 @@ class SuggestReplyResponse(BaseModel):
     confidence: float
 
 
+class RateTicketRequest(BaseModel):
+    """客户评价工单"""
+    rating: int = Field(ge=1, le=5, description="满意度评分 1-5")
+    comment: Optional[str] = Field(default=None, max_length=500, description="评价留言")
+
+
 class ResolveTicketRequest(BaseModel):
     final_reply: str
+    satisfaction_rating: Optional[int] = Field(default=None, ge=1, le=5)
+    satisfaction_comment: Optional[str] = Field(default=None, max_length=500)
 
 
 # Reply Templates

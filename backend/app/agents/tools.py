@@ -24,44 +24,98 @@ def _register(schema: dict, handler: callable):
 
 # ── Tool: Query customer service tickets ─────────────────────
 
-async def _get_my_tickets(user_id: str, limit: int = 5) -> str:
-    """Query the database for the current user's tickets."""
+async def _get_my_tickets(
+    user_id: str,
+    limit: int = 5,
+    status: str | None = None,
+    category: str | None = None,
+    priority: str | None = None,
+) -> str:
+    """Query the database for the current user's tickets, with optional filters."""
     from app.core.database import async_session_factory
-    from sqlalchemy import select, text
+    from sqlalchemy import text
+
+    conditions = ["user_id = :uid"]
+    params: dict = {"uid": user_id, "lim": limit}
+
+    if status:
+        status_map = {
+            "待处理": "OPEN", "处理中": "IN_PROGRESS", "等待客户": "WAITING_CUSTOMER",
+            "已解决": "RESOLVED", "已关闭": "CLOSED",
+            "未处理": "OPEN", "未解决": "OPEN",
+        }
+        db_status = status_map.get(status, status.upper() if status.isascii() else status)
+        conditions.append("status = :st")
+        params["st"] = db_status
+
+    if category:
+        conditions.append("problem_category LIKE :cat")
+        params["cat"] = f"%{category}%"
+
+    if priority:
+        prio_map = {"低": "LOW", "中": "MEDIUM", "高": "HIGH", "紧急": "URGENT"}
+        db_prio = prio_map.get(priority, priority.upper() if priority.isascii() else priority)
+        conditions.append("priority = :pr")
+        params["pr"] = db_prio
+
+    where = " AND ".join(conditions)
 
     async with async_session_factory() as db:
         result = await db.execute(
             text(
-                "SELECT subject, status, priority, problem_category, created_at "
-                "FROM customer_service_tickets "
-                "WHERE user_id = :uid ORDER BY created_at DESC LIMIT :lim"
+                f"SELECT subject, status, priority, problem_category, created_at "
+                f"FROM customer_service_tickets "
+                f"WHERE {where} ORDER BY created_at DESC LIMIT :lim"
             ),
-            {"uid": user_id, "lim": limit},
+            params,
         )
         rows = result.fetchall()
         if not rows:
-            return "您目前没有工单记录。"
+            filters_desc = []
+            if status:
+                filters_desc.append(f"状态为'{status}'")
+            if category:
+                filters_desc.append(f"分类为'{category}'")
+            desc = "且".join(filters_desc) if filters_desc else ""
+            return f"您目前没有{desc}的工单。" if desc else "您目前没有工单记录。"
 
+        status_cn = {"OPEN": "待处理", "IN_PROGRESS": "处理中", "RESOLVED": "已解决", "CLOSED": "已关闭"}
         items = []
         for r in rows:
-            items.append(
-                f"- [{r[1]}] {r[0]} (优先级: {r[2]}, 分类: {r[3] or '未分类'}, 创建: {r[4]})"
-            )
-        return "您的工单列表：\n" + "\n".join(items)
+            st = status_cn.get(r[1], r[1])
+            items.append(f"- [{st}] {r[0]} (优先级: {r[2]}, 分类: {r[3] or '未分类'}, 创建: {r[4]})")
+
+        header = f"以下是最新{len(items)}条工单（系统限制最多显示{limit}条）：\n" if len(items) == limit else f"您的工单列表（共{len(items)}条）：\n"
+        return header + "\n".join(items)
 
 
 _get_my_tickets_schema = {
     "type": "function",
     "function": {
         "name": "get_my_tickets",
-        "description": "查询当前用户的工单列表。当用户想查看自己的工单、问'我的工单'、问工单状态时调用。",
+        "description": (
+            "查询当前用户的工单列表。当用户想查看自己的工单、问'我的工单'、问工单状态时调用。"
+            "系统限制每次最多返回5条工单。"
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "limit": {
                     "type": "integer",
-                    "description": "返回的工单数量上限，默认5条",
+                    "description": "返回的工单数量上限，固定为5条",
                     "default": 5,
+                },
+                "status": {
+                    "type": "string",
+                    "description": "按状态筛选：待处理/未处理（未解决的）、处理中、已解决、已关闭。用户说'未处理的'、'没解决的'、'进行中的'时使用此参数。",
+                },
+                "category": {
+                    "type": "string",
+                    "description": "按分类筛选：技术支持、账号问题、账单咨询、产品咨询、投诉建议等。",
+                },
+                "priority": {
+                    "type": "string",
+                    "description": "按优先级筛选：低、中、高、紧急。用户说'优先级为中的'、'高优先级的'时使用此参数。",
                 },
             },
         },

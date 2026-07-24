@@ -4,26 +4,26 @@
       <!-- AI Configurations -->
       <el-tab-pane label="AI配置" name="configs">
         <el-table :data="adminStore.aiConfigs" stripe v-loading="configLoading" class="mt-16">
-          <el-table-column prop="key" label="配置键" width="220" />
-          <el-table-column prop="value" label="当前值" min-width="280">
+          <el-table-column prop="config_key" label="配置键" width="220" />
+          <el-table-column prop="config_value" label="当前值" min-width="280">
             <template #default="{ row }">
-              <template v-if="editingConfigKey === row.key">
+              <template v-if="editingConfigKey === row.config_key">
                 <el-input
                   v-model="editingConfigValue"
-                  :type="isSensitive(row.key) ? 'password' : 'text'"
+                  :type="isSensitive(row.config_key) ? 'password' : 'text'"
                   show-password
                   size="small"
                 />
               </template>
               <template v-else>
-                <span v-if="isSensitive(row.key)">********</span>
-                <span v-else>{{ row.value }}</span>
+                <span v-if="isSensitive(row.config_key)">********</span>
+                <span v-else>{{ row.config_value }}</span>
               </template>
             </template>
           </el-table-column>
           <el-table-column prop="description" label="说明" min-width="200">
             <template #default="{ row }">
-              <template v-if="editingConfigKey === row.key">
+              <template v-if="editingConfigKey === row.config_key">
                 <el-input v-model="editingConfigDescription" size="small" />
               </template>
               <template v-else>
@@ -33,7 +33,7 @@
           </el-table-column>
           <el-table-column label="操作" width="140" fixed="right">
             <template #default="{ row }">
-              <template v-if="editingConfigKey === row.key">
+              <template v-if="editingConfigKey === row.config_key">
                 <el-button link type="primary" size="small" :loading="savingConfig" @click="saveInlineConfig(row)">保存</el-button>
                 <el-button link type="info" size="small" @click="cancelInlineEdit">取消</el-button>
               </template>
@@ -199,8 +199,8 @@ async function loadConfigs() {
 }
 
 function startInlineEdit(row) {
-  editingConfigKey.value = row.key
-  editingConfigValue.value = row.value
+  editingConfigKey.value = row.config_key
+  editingConfigValue.value = row.config_value
   editingConfigDescription.value = row.description || ''
 }
 
@@ -213,7 +213,7 @@ function cancelInlineEdit() {
 async function saveInlineConfig(row) {
   savingConfig.value = true
   try {
-    await adminStore.editAIConfig(row.key, editingConfigValue.value, editingConfigDescription.value)
+    await adminStore.editAIConfig(row.config_key, editingConfigValue.value, editingConfigDescription.value)
     ElMessage.success('配置已更新')
     cancelInlineEdit()
     await loadConfigs()

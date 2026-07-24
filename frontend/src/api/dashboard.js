@@ -18,12 +18,12 @@ export function getCategories() {
 
 // Get customer satisfaction trend over a number of days
 export function getSatisfactionTrend(days = 30) {
-  return api.get(`${BASE}/satisfaction-trend`, { params: { days } })
+  return api.get(`${BASE}/satisfaction`, { params: { days } })
 }
 
 // Get ticket volume trend over a number of days
 export function getVolumeTrend(days = 30) {
-  return api.get(`${BASE}/volume-trend`, { params: { days } })
+  return api.get(`${BASE}/volume`, { params: { days } })
 }
 
 // Get AI-generated insights

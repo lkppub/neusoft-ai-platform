@@ -73,7 +73,7 @@
             </div>
           </div>
           <div class="answer-card-body">
-            <p class="answer-text">{{ knowledgeStore.searchResults.answer }}</p>
+            <div class="answer-text" v-html="renderMarkdown(knowledgeStore.searchResults.answer)"></div>
           </div>
         </div>
 
@@ -105,9 +105,7 @@
                   </span>
                 </div>
               </div>
-              <p class="source-content">
-                {{ truncateContent(source.content) }}
-              </p>
+              <div class="source-content" v-html="renderMarkdown(truncateContent(source.content))"></div>
               <div class="source-card-footer">
                 <el-icon :size="14"><FolderOpened /></el-icon>
                 <span class="source-name">{{ source.metadata?.source || '未知来源' }}</span>
@@ -123,6 +121,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
+import { marked } from 'marked'
 import { ElMessage } from 'element-plus'
 import { Search, Document, FolderOpened, MagicStick } from '@element-plus/icons-vue'
 
@@ -136,6 +135,11 @@ const hasResults = computed(() => {
   const results = knowledgeStore.searchResults
   return !!(results.answer || (results.sources && results.sources.length > 0))
 })
+
+function renderMarkdown(text) {
+  if (!text) return ''
+  return marked(text, { breaks: true })
+}
 
 function truncateContent(content) {
   if (!content) return ''

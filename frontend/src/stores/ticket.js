@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
   listTickets, createTicket, getTicket, updateTicket,
-  addTicketMessage, classifyTicket, suggestReply, resolveTicket, getTicketMessages,
+  addTicketMessage, classifyTicket, suggestReply, resolveTicket, rateTicket, getTicketMessages,
 } from '@/api/tickets'
 
 export const useTicketStore = defineStore('ticket', () => {
@@ -82,6 +82,14 @@ export const useTicketStore = defineStore('ticket', () => {
     }
   }
 
+  async function rateTicketAction(id, rating, comment = '') {
+    await rateTicket(id, rating, comment)
+    if (ticketDetail.value && ticketDetail.value.id === id) {
+      ticketDetail.value.satisfaction_rating = rating
+      ticketDetail.value.satisfaction_comment = comment
+    }
+  }
+
   async function fetchMessages(ticketId) {
     ticketMessages.value = await getTicketMessages(ticketId)
     return ticketMessages.value
@@ -95,7 +103,7 @@ export const useTicketStore = defineStore('ticket', () => {
     tickets, activeTicketId, ticketDetail, ticketMessages, filters, ticketsTotal,
     activeTicket, filteredTickets, ticketStats,
     fetchTickets, createNewTicket, fetchTicketDetail, updateTicketInfo,
-    addMessage, classifyTicketAction, suggestReplyAction, resolveTicketAction,
+    addMessage, classifyTicketAction, suggestReplyAction, resolveTicketAction, rateTicketAction,
     fetchMessages, setFilters,
   }
 })

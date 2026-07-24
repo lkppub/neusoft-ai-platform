@@ -4,14 +4,13 @@ from sqlalchemy import select, func
 from datetime import date, timedelta
 
 from app.core.database import get_db
-from app.api.deps import get_current_user, require_role
+from app.api.deps import get_current_user
 from app.models.user import User
-from app.models.analytics import DashboardSnapshot
-from app.schemas.dashboard import (
-    DashboardOverviewResponse, CategoryDistribution,
-    SatisfactionTrend, VolumeTrend, InsightCard, HotTopic, RealTimeMetric,
-)
 from app.models.conversation import Conversation
+from app.models.ticket import CustomerServiceTicket
+from app.schemas.dashboard import (
+    DashboardOverviewResponse, RealTimeMetric,
+)
 from app.services.analytics.stats_service import get_dashboard_stats
 
 router = APIRouter(prefix="/dashboard", tags=["数据大屏"])
@@ -22,7 +21,7 @@ async def get_overview(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取仪表盘概览数据"""
+    """仪表盘概览 — 从数据库实时统计"""
     return await get_dashboard_stats(db)
 
 
@@ -31,23 +30,31 @@ async def get_categories(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取问题分类分布"""
-    today = date.today()
+    """问题分类分布 — 从工单表实时统计"""
     result = await db.execute(
-        select(DashboardSnapshot).where(DashboardSnapshot.snapshot_date == today)
+        select(
+            CustomerServiceTicket.problem_category,
+            func.count(CustomerServiceTicket.id),
+        )
+        .where(CustomerServiceTicket.problem_category.isnot(None))
+        .where(CustomerServiceTicket.problem_category != "")
+        .group_by(CustomerServiceTicket.problem_category)
+        .order_by(func.count(CustomerServiceTicket.id).desc())
     )
-    snapshot = result.scalar_one_or_none()
+    rows = result.all()
+    total = sum(r[1] for r in rows)
 
-    default = [
-        {"name": "技术支持", "value": 45, "percentage": 37.5},
-        {"name": "账单咨询", "value": 30, "percentage": 25.0},
-        {"name": "产品咨询", "value": 25, "percentage": 20.8},
-        {"name": "投诉建议", "value": 12, "percentage": 10.0},
-        {"name": "其他", "value": 8, "percentage": 6.7},
+    if not rows or total == 0:
+        return []
+
+    return [
+        {
+            "name": r[0] or "未分类",
+            "value": r[1],
+            "percentage": round(r[1] / total * 100, 1),
+        }
+        for r in rows
     ]
-    if snapshot and snapshot.category_distribution:
-        return [{"name": k, "value": v, "percentage": round(v / sum(snapshot.category_distribution.values()) * 100, 1) if snapshot.category_distribution else 0} for k, v in snapshot.category_distribution.items()]
-    return default
 
 
 @router.get("/satisfaction")
@@ -56,18 +63,37 @@ async def get_satisfaction_trend(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取满意度趋势"""
+    """满意度趋势 — 从真实工单评分统计"""
     start_date = date.today() - timedelta(days=days)
+
+    # 只查有评价的已解决工单
     result = await db.execute(
-        select(DashboardSnapshot)
-        .where(DashboardSnapshot.snapshot_date >= start_date)
-        .order_by(DashboardSnapshot.snapshot_date)
+        select(
+            func.date(CustomerServiceTicket.resolved_at),
+            func.avg(CustomerServiceTicket.satisfaction_rating),
+            func.count(CustomerServiceTicket.satisfaction_rating),
+        )
+        .where(CustomerServiceTicket.satisfaction_rating.isnot(None))
+        .where(func.date(CustomerServiceTicket.resolved_at) >= start_date)
+        .group_by(func.date(CustomerServiceTicket.resolved_at))
+        .order_by(func.date(CustomerServiceTicket.resolved_at))
     )
-    snapshots = result.scalars().all()
-    return [{"date": str(s.snapshot_date), "score": s.satisfaction_score} for s in snapshots] or [
-        {"date": str(date.today() - timedelta(days=i)), "score": 3.5 + (i * 0.2)}
-        for i in range(days, 0, -1)
-    ]
+    daily_ratings = {
+        str(r[0]): {"avg": round(float(r[1]), 1), "count": r[2]}
+        for r in result.all()
+    }
+
+    trend = []
+    for i in range(days, 0, -1):
+        d = str(date.today() - timedelta(days=i))
+        item = daily_ratings.get(d)
+        trend.append({
+            "date": d,
+            "score": item["avg"] if item else None,
+            "count": item["count"] if item else 0,
+        })
+
+    return trend
 
 
 @router.get("/volume")
@@ -76,18 +102,35 @@ async def get_volume_trend(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取咨询量趋势"""
+    """咨询量趋势 — 从对话和工单表实时统计"""
     start_date = date.today() - timedelta(days=days)
-    result = await db.execute(
-        select(DashboardSnapshot)
-        .where(DashboardSnapshot.snapshot_date >= start_date)
-        .order_by(DashboardSnapshot.snapshot_date)
+
+    # Conversations per day
+    conv_result = await db.execute(
+        select(func.date(Conversation.created_at), func.count(Conversation.id))
+        .where(func.date(Conversation.created_at) >= start_date)
+        .group_by(func.date(Conversation.created_at))
     )
-    snapshots = result.scalars().all()
-    return [{"date": str(s.snapshot_date), "inquiries": s.total_inquiries, "tickets": s.total_tickets} for s in snapshots] or [
-        {"date": str(date.today() - timedelta(days=i)), "inquiries": 50 + i * 10, "tickets": 15 + i * 3}
-        for i in range(days, 0, -1)
-    ]
+    conv_counts = {str(r[0]): r[1] for r in conv_result.all()}
+
+    # Tickets per day
+    ticket_result = await db.execute(
+        select(func.date(CustomerServiceTicket.created_at), func.count(CustomerServiceTicket.id))
+        .where(func.date(CustomerServiceTicket.created_at) >= start_date)
+        .group_by(func.date(CustomerServiceTicket.created_at))
+    )
+    ticket_counts = {str(r[0]): r[1] for r in ticket_result.all()}
+
+    trend = []
+    for i in range(days, 0, -1):
+        d = str(date.today() - timedelta(days=i))
+        trend.append({
+            "date": d,
+            "inquiries": conv_counts.get(d, 0),
+            "tickets": ticket_counts.get(d, 0),
+        })
+
+    return trend
 
 
 @router.get("/insights")
@@ -95,44 +138,123 @@ async def get_insights(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取AI智能分析洞察卡片"""
-    from app.services.ai.provider_factory import get_ai_provider
-    ai = get_ai_provider()
+    """AI 智能分析洞察 — 基于真实统计数据生成"""
+    # Gather real stats
+    total_tickets = (await db.execute(
+        select(func.count(CustomerServiceTicket.id))
+    )).scalar() or 0
 
-    # Try AI-generated insights, fall back to defaults
+    open_tickets = (await db.execute(
+        select(func.count(CustomerServiceTicket.id))
+        .where(CustomerServiceTicket.status.in_(["open", "in_progress"]))
+    )).scalar() or 0
+
+    resolved_tickets = (await db.execute(
+        select(func.count(CustomerServiceTicket.id))
+        .where(CustomerServiceTicket.status == "resolved")
+    )).scalar() or 0
+
+    resolution_rate = round(resolved_tickets / total_tickets * 100, 1) if total_tickets > 0 else 0
+
+    total_convs = (await db.execute(
+        select(func.count(Conversation.id))
+    )).scalar() or 0
+
+    # Top category
+    top_cat_result = await db.execute(
+        select(
+            CustomerServiceTicket.problem_category,
+            func.count(CustomerServiceTicket.id),
+        )
+        .where(CustomerServiceTicket.problem_category.isnot(None))
+        .where(CustomerServiceTicket.problem_category != "")
+        .group_by(CustomerServiceTicket.problem_category)
+        .order_by(func.count(CustomerServiceTicket.id).desc())
+        .limit(1)
+    )
+    top_cat = top_cat_result.first()
+    top_category_name = top_cat[0] if top_cat else "暂无"
+
+    # Try AI generation, fall back to template
     try:
-        prompt = """基于以下假设的商务平台数据，生成3-4条简短的分析洞察（每条不超过50字）：
-- 今日咨询量增长20%
-- 技术支持类问题占比最高（37.5%）
-- 客户满意度4.1/5.0
-- AI自动回复率65%
+        from app.services.ai.provider_factory import get_ai_provider
+        ai = get_ai_provider()
 
-请以JSON列表格式返回：[{"title": "标题", "content": "内容", "icon": "trend/star/warning/info", "change": 数字或null, "change_type": "up/down/neutral"}]"""
+        prompt = f"""基于以下真实平台数据，生成4条简短的分析洞察（每条不超过40字）：
+
+- 总工单数：{total_tickets}
+- 待处理工单：{open_tickets}
+- 解决率：{resolution_rate}%
+- 总咨询量：{total_convs}
+- 问题最多类别：{top_category_name}
+
+以JSON列表格式返回：[{{"title": "标题", "content": "内容"}}]"""
         response = await ai.chat([{"role": "user", "content": prompt}])
         import json
-        insights = json.loads(response)
-        return [{"id": str(i), **item} for i, item in enumerate(insights)]
+        try:
+            insights = json.loads(response)
+            return [{"id": str(i), **item} for i, item in enumerate(insights)]
+        except json.JSONDecodeError:
+            pass
     except Exception:
-        return [
-            {"id": "1", "title": "咨询量增长", "content": "今日咨询量较昨日增长20%，主要集中在技术支持类问题", "icon": "trend", "change": 20, "change_type": "up"},
-            {"id": "2", "title": "AI自动回复率", "content": "当前AI自动回复率达65%，有效减轻客服人员工作负担", "icon": "star", "change": 5, "change_type": "up"},
-            {"id": "3", "title": "满意度趋势", "content": "本周客户满意度评分4.1/5.0，较上周略有提升", "icon": "star", "change": 0.2, "change_type": "up"},
-            {"id": "4", "title": "待处理工单", "content": "当前有12个未分配工单，建议尽快分配给客服人员处理", "icon": "warning", "change": None, "change_type": "neutral"},
-        ]
+        pass
+
+    # Fallback with real numbers
+    return [
+        {
+            "id": "1",
+            "title": f"{open_tickets} 个待处理工单",
+            "content": f"当前有 {open_tickets} 个工单等待处理，解决率 {resolution_rate}%",
+        },
+        {
+            "id": "2",
+            "title": f"问题热点：{top_category_name}",
+            "content": f"'{top_category_name}' 类问题占比最高，建议重点关注",
+        },
+        {
+            "id": "3",
+            "title": f"累计 {total_convs} 次 AI 对话",
+            "content": f"AI 对话助手已服务 {total_convs} 次咨询",
+        },
+        {
+            "id": "4",
+            "title": f"工单总量 {total_tickets}",
+            "content": f"系统累计处理 {total_tickets} 个工单，已解决 {resolved_tickets} 个",
+        },
+    ]
 
 
 @router.get("/hot-topics")
 async def get_hot_topics(
+    limit: int = Query(default=10, ge=1, le=20),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取热门话题"""
+    """热门话题 — 从工单主题词统计"""
+    result = await db.execute(
+        select(
+            CustomerServiceTicket.problem_category,
+            func.count(CustomerServiceTicket.id),
+        )
+        .where(CustomerServiceTicket.problem_category.isnot(None))
+        .where(CustomerServiceTicket.problem_category != "")
+        .group_by(CustomerServiceTicket.problem_category)
+        .order_by(func.count(CustomerServiceTicket.id).desc())
+        .limit(limit)
+    )
+    rows = result.all()
+
+    if not rows:
+        return []
+
+    max_count = rows[0][1] if rows else 1
     return [
-        {"keyword": "退款流程", "count": 128, "trend": "up"},
-        {"keyword": "账户登录", "count": 95, "trend": "stable"},
-        {"keyword": "产品规格", "count": 87, "trend": "up"},
-        {"keyword": "配送时效", "count": 72, "trend": "down"},
-        {"keyword": "优惠活动", "count": 65, "trend": "up"},
+        {
+            "keyword": r[0],
+            "count": r[1],
+            "trend": "up" if r[1] >= max_count * 0.5 else "stable",
+        }
+        for r in rows
     ]
 
 
@@ -141,13 +263,33 @@ async def get_realtime(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取实时指标"""
-    active_convs = (await db.execute(select(func.count()).select_from(select(func.distinct(Conversation.user_id)).alias()))).scalar() or 0
+    """实时指标 — 从数据库实时统计"""
+    # Active conversations (distinct users who sent messages)
+    active_users = (await db.execute(
+        select(func.count(func.distinct(Conversation.user_id)))
+    )).scalar() or 0
+
+    # Pending tickets
+    pending = (await db.execute(
+        select(func.count(CustomerServiceTicket.id))
+        .where(CustomerServiceTicket.status.in_(["open", "in_progress"]))
+    )).scalar() or 0
+
+    # AI response rate (tickets with AI classification / total)
+    total_tickets = (await db.execute(
+        select(func.count(CustomerServiceTicket.id))
+    )).scalar() or 1
+
+    ai_classified = (await db.execute(
+        select(func.count(CustomerServiceTicket.id))
+        .where(CustomerServiceTicket.ai_classification.isnot(None))
+    )).scalar() or 0
+
+    ai_rate = round(ai_classified / total_tickets * 100, 1) if total_tickets > 0 else 0
+
     return RealTimeMetric(
-        active_conversations=active_convs,
-        messages_per_minute=3.5,
-        pending_tickets=12,
-        ai_response_rate=65.0,
+        active_conversations=active_users,
+        messages_per_minute=0,
+        pending_tickets=pending,
+        ai_response_rate=ai_rate,
     )
-
-

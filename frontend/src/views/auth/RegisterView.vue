@@ -31,7 +31,7 @@
         :model="form"
         :rules="rules"
         class="register-form"
-        size="large"
+        size="default"
         label-position="top"
       >
         <el-form-item prop="username" label="用户名">
@@ -208,34 +208,42 @@ const handleRegister = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(160deg, #e8f4fd 0%, #dceefb 30%, #f0f7ff 60%, #e3edf5 100%);
 }
 
 .register-card {
   width: 460px;
-  padding: 40px 40px 32px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-  max-height: 90vh;
-  overflow-y: auto;
+  padding: 24px 44px 20px;
+}
+
+/* 压缩表单间距 */
+.register-form :deep(.el-form-item) {
+  margin-bottom: 12px;
+}
+
+.register-form :deep(.el-form-item__label) {
+  padding-bottom: 2px;
+  font-size: 13px;
 }
 
 .register-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .register-header h1 {
-  font-size: 24px;
-  color: #303133;
-  margin-bottom: 8px;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1a3a5c;
+  margin: 0 0 8px 0;
 }
 
 .register-header p {
   font-size: 14px;
-  color: #909399;
+  color: #7a8fa0;
+  margin: 0;
 }
 
 .register-alert {
@@ -246,21 +254,30 @@ const handleRegister = async () => {
   width: 100%;
 }
 
+/* ── 按钮 ── */
 .register-btn {
   width: 100%;
+  height: 46px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  margin-top: 4px;
 }
 
 .register-footer {
   text-align: center;
   font-size: 14px;
+  margin-top: 4px;
 }
 
 .register-footer a {
   color: #409eff;
   text-decoration: none;
+  font-weight: 500;
 }
 
 .register-footer a:hover {
-  text-decoration: underline;
+  color: #337ecc;
 }
 </style>

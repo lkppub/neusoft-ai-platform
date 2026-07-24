@@ -104,7 +104,7 @@ const createForm = reactive({ subject: '', description: '', priority: 'medium' }
 const statusMap = { open: '待处理', in_progress: '处理中', waiting_customer: '等待客户', resolved: '已解决', closed: '已关闭' }
 const priorityMap = { low: '低', medium: '中', high: '高', urgent: '紧急' }
 function statusType(s) { return { open: 'danger', in_progress: 'warning', waiting_customer: 'info', resolved: 'success', closed: 'info' }[s] || 'info' }
-function priorityType(p) { return { low: 'info', medium: '', high: 'warning', urgent: 'danger' }[p] || '' }
+function priorityType(p) { return { low: 'info', medium: 'info', high: 'warning', urgent: 'danger' }[p] || 'info' }
 function formatDate(d) { if (!d) return ''; return new Date(d).toLocaleString('zh-CN') }
 function goDetail(row) { router.push(`/tickets/${row.id}`) }
 

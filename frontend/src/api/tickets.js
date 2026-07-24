@@ -51,6 +51,11 @@ export function resolveTicket(id, finalReply) {
   return api.post(`${BASE}/${id}/resolve`, { final_reply: finalReply })
 }
 
+// Rate a resolved ticket (1-5)
+export function rateTicket(id, rating, comment = '') {
+  return api.post(`${BASE}/${id}/rate`, { rating, comment })
+}
+
 // Get all messages for a ticket
 export function getTicketMessages(id) {
   return api.get(`${BASE}/${id}/messages`)

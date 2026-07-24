@@ -17,8 +17,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   async function fetchOverview() { overview.value = await getOverview() }
   async function fetchCategories() { categories.value = await getCategories() }
-  async function fetchSatisfaction(days = 7) { satisfaction.value = await getSatisfactionTrend(days) }
-  async function fetchVolume(days = 7) { volume.value = await getVolumeTrend(days) }
+  async function fetchSatisfaction(days = 30) { satisfaction.value = await getSatisfactionTrend(days) }
+  async function fetchVolume(days = 30) { volume.value = await getVolumeTrend(days) }
   async function fetchInsights() { insights.value = await getInsights() }
   async function fetchHotTopics() { hotTopics.value = await getHotTopics() }
   async function fetchRealtime() { realtime.value = await getRealtime() }

@@ -1,10 +1,5 @@
 <template>
   <div class="dashboard-page">
-    <div class="page-header">
-      <h2>数据大屏</h2>
-      <el-tag size="large" type="info">{{ currentTime }}</el-tag>
-    </div>
-
     <!-- Top row: 4 StatsCard components -->
     <el-row :gutter="20" class="stats-row">
       <el-col :xs="24" :sm="12" :lg="6" v-for="stat in statCards" :key="stat.label">
@@ -39,7 +34,7 @@
       </el-col>
       <el-col :xs="24" :lg="12">
         <el-card shadow="hover" class="chart-card">
-          <template #header><span>满意度趋势（近30天）</span></template>
+          <template #header><span>满意度趋势（近30天，仅显示有评分的日期）</span></template>
           <div v-if="!hasSatisfactionData" class="chart-empty">
             <el-empty description="暂无满意度数据" :image-size="80" />
           </div>
@@ -70,19 +65,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import * as echarts from 'echarts'
 import { useDashboardStore } from '@/stores/dashboard'
 import { Document, ChatDotRound, CircleCheck, Star, TrendCharts, DataAnalysis, Platform, Opportunity } from '@element-plus/icons-vue'
 
 const store = useDashboardStore()
-
-// ---- Clock ----
-const currentTime = ref('')
-let timeTimer = null
-
-function updateClock() {
-  currentTime.value = new Date().toLocaleString('zh-CN')
-}
 
 // ---- Animated counter ----
 const animated = ref({
@@ -159,7 +145,7 @@ const statCards = computed(() => [
     sub: '客户满意度均分',
     icon: Star,
     color: '#f56c6c',
-    suffix: '%'
+    suffix: '/5'
   }
 ])
 
@@ -209,25 +195,27 @@ function getCategoryChartData() {
 function getSatisfactionChartData() {
   const sat = store.satisfaction
   if (!sat) return { dates: [], values: [] }
-  if (sat.dates && sat.values) return { dates: sat.dates, values: sat.values }
-  if (sat.labels && sat.data) return { dates: sat.labels, values: sat.data }
   if (Array.isArray(sat)) {
+    // Filter to dates with actual ratings
+    const withData = sat.filter(s => s.score != null && s.score > 0)
+    if (withData.length === 0) return { dates: [], values: [] }
     return {
-      dates: sat.map(s => s.date ?? s.label ?? s.month ?? ''),
-      values: sat.map(s => s.value ?? s.score ?? s.rate ?? 0)
+      dates: withData.map(s => s.date ?? ''),
+      values: withData.map(s => Math.round(s.score * 20))  // 1-5 → 0-100%
     }
   }
   return { dates: [], values: [] }
 }
 
-function initPieChart() {
+async function initPieChart() {
   if (!pieChartRef.value) return
   if (pieChartInstance) pieChartInstance.dispose()
 
   const rawData = getCategoryChartData()
   if (rawData.length === 0) return
 
-  pieChartInstance = echarts.init(pieChartRef.value, 'dark')
+  const echarts = await import('echarts')
+  pieChartInstance = echarts.init(pieChartRef.value)
   pieChartInstance.setOption({
     tooltip: {
       trigger: 'item',
@@ -262,14 +250,15 @@ function initPieChart() {
   })
 }
 
-function initLineChart() {
+async function initLineChart() {
   if (!lineChartRef.value) return
   if (lineChartInstance) lineChartInstance.dispose()
 
   const { dates, values } = getSatisfactionChartData()
   if (dates.length === 0) return
 
-  lineChartInstance = echarts.init(lineChartRef.value, 'dark')
+  const echarts = await import('echarts')
+  lineChartInstance = echarts.init(lineChartRef.value)
   lineChartInstance.setOption({
     tooltip: {
       trigger: 'axis',
@@ -278,7 +267,8 @@ function initLineChart() {
       textStyle: { color: '#e2e8f0' },
       formatter: (params) => {
         const p = params[0]
-        return `${p.axisValue}<br/>满意度: <b>${p.value}%</b>`
+        const stars = Math.round(p.value / 20 * 10) / 10
+        return `${p.axisValue}<br/>满意度: <b>${stars}/5</b>`
       }
     },
     grid: { left: '3%', right: '4%', top: '8%', bottom: '3%', containLabel: true },
@@ -294,7 +284,8 @@ function initLineChart() {
       type: 'value',
       min: 0,
       max: 100,
-      axisLabel: { color: '#94a3b8', formatter: '{value}%' },
+      interval: 20,
+      axisLabel: { color: '#94a3b8', formatter: (v) => `${Math.round(v/20)}分` },
       splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } }
     },
     series: [{
@@ -384,8 +375,6 @@ function handleResize() {
 
 // ---- Lifecycle ----
 onMounted(async () => {
-  updateClock()
-  timeTimer = setInterval(updateClock, 1000)
   window.addEventListener('resize', handleResize)
 
   await store.fetchAll()
@@ -397,7 +386,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  clearInterval(timeTimer)
   window.removeEventListener('resize', handleResize)
   store.stopPolling()
   pieChartInstance?.dispose()
@@ -408,20 +396,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .dashboard-page {
   padding: 0;
-}
-
-/* ---- Header ---- */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-.page-header h2 {
-  font-size: 20px;
-  font-weight: 600;
-  color: #e2e8f0;
-  margin: 0;
 }
 
 /* ---- Stats Row ---- */

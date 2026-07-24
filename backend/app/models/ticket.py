@@ -43,6 +43,8 @@ class CustomerServiceTicket(Base):
     ai_reply_confidence: Mapped[float] = mapped_column(Float, nullable=True)
     final_reply: Mapped[str] = mapped_column(Text, nullable=True)
     resolved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    satisfaction_rating: Mapped[int] = mapped_column(Integer, nullable=True)  # 1-5 星评分
+    satisfaction_comment: Mapped[str] = mapped_column(Text, nullable=True)     # 用户评价留言
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

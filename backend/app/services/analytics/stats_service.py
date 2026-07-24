@@ -39,23 +39,15 @@ async def get_dashboard_stats(db: AsyncSession) -> DashboardOverviewResponse:
         .where(func.date(Conversation.updated_at) == today)
     )).scalar() or 0
 
-    # Calculate real avg response time and satisfaction from snapshots
-    from app.models.analytics import DashboardSnapshot
-    recent_snapshots = (await db.execute(
-        select(DashboardSnapshot)
-        .order_by(DashboardSnapshot.snapshot_date.desc())
-        .limit(7)
-    )).scalars().all()
+    # Calculate real satisfaction from ticket ratings
+    satisfaction_result = await db.execute(
+        select(func.avg(CustomerServiceTicket.satisfaction_rating))
+        .where(CustomerServiceTicket.satisfaction_rating.isnot(None))
+    )
+    satisfaction = satisfaction_result.scalar()
+    satisfaction = round(float(satisfaction), 1) if satisfaction else 0.0
 
     avg_response = 120.0
-    satisfaction = 4.1
-    if recent_snapshots:
-        avg_response = sum(
-            s.avg_response_time_seconds for s in recent_snapshots
-        ) / len(recent_snapshots)
-        satisfaction = sum(
-            s.satisfaction_score for s in recent_snapshots
-        ) / len(recent_snapshots)
 
     result = DashboardOverviewResponse(
         total_inquiries=total_convs,
