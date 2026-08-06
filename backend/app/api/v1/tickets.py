@@ -84,20 +84,12 @@ async def auto_classify_ticket(ticket_id: str) -> dict | None:
                     {"role": "user", "content": user_prompt},
                 ]
             else:
-                prompt = f"""请对以下客户工单进行分类。你必须从下列分类中选择最匹配的一项：
+                prompt = f"""分类工单。category只能从以下9个词中选一个：技术支持、账号问题、账单咨询、产品咨询、投诉建议、售后服务、功能需求、商务咨询、其他。
 
-【可用分类】
-技术支持、账号问题、账单咨询、产品咨询、投诉建议、售后服务、功能需求、商务咨询、其他
-
-【规则】
-- category 必须严格从上述列表中选取，不得自创
-- 如果无法明确归入前8类，使用"其他"
-
-【工单信息】
 主题：{ticket.subject}
 描述：{ticket.description}
 
-请返回JSON格式：{{"category": "上述分类之一", "sentiment": "positive/neutral/negative", "key_details": "关键信息摘要"}}"""
+返回JSON（category必须是上面9词之一）：{{"category": "x", "sentiment": "positive/neutral/negative", "key_details": "摘要"}}"""
                 messages = [{"role": "user", "content": prompt}]
 
             _log.info("[auto_classify] 调用 AI 分类...")
@@ -108,10 +100,33 @@ async def auto_classify_ticket(ticket_id: str) -> dict | None:
             try:
                 classification = json.loads(response)
             except json.JSONDecodeError:
-                classification = {"category": "未分类", "sentiment": "neutral", "key_details": response[:200]}
+                classification = {"category": "其他", "sentiment": "neutral", "key_details": response[:200]}
 
-            # 只更新分类信息，不修改优先级（优先级由用户创建工单时决定）
-            ticket.problem_category = classification.get("category", "未分类")
+            # 用 key_details 关键词匹配最相似的标准分类（AI 的 category 不够可靠）
+            details = classification.get("key_details", "") + ticket.subject + (ticket.description or "")
+            kw_map = {
+                "技术支持": ["技术", "系统", "服务器", "API", "接口", "报错", "500", "性能", "响应", "加载", "故障", "配置", "部署", "错误", "无法", "失败", "超时"],
+                "账号问题": ["登录", "密码", "账号", "账户", "注册", "权限", "验证", "绑定", "解锁", "认证"],
+                "账单咨询": ["账单", "发票", "退款", "费用", "支付", "扣款", "余额", "金额", "消费"],
+                "产品咨询": ["产品", "功能", "版本", "套餐", "升级", "介绍", "试用", "方案", "有什么", "支持哪些"],
+                "投诉建议": ["投诉", "建议", "不满", "态度", "慢", "差", "改进", "反馈", "意见", "体验"],
+                "售后服务": ["售后", "退货", "换货", "维修", "保修", "退换", "寄回", "物流"],
+                "功能需求": ["需求", "增加", "新增", "希望", "能不能", "可否", "定制", "开发", "导出"],
+                "商务咨询": ["商务", "采购", "价格", "合同", "合作", "批量", "优惠", "报价", "企业"],
+            }
+            scores = {c: sum(1 for kw in kws if kw in details) for c, kws in kw_map.items()}
+            best = max(scores, key=scores.get)
+            # 只有当关键词明确命中时才覆盖 AI 的分类，否则保留 AI 的（可能是正确的"其他"）
+            ai_cat = classification.get("category", "其他")
+            if max(scores.values()) >= 2:
+                cat = best
+            elif ai_cat in ["技术支持", "账号问题", "账单咨询", "产品咨询", "投诉建议", "售后服务", "功能需求", "商务咨询"]:
+                cat = ai_cat
+            else:
+                cat = best if max(scores.values()) > 0 else "其他"
+
+            # 只更新分类信息，不修改优先级
+            ticket.problem_category = cat
             ticket.ai_classification = classification
             await db.commit()
 
