@@ -1,3 +1,5 @@
+[English](README.en.md) | **中文**
+
 # 东软智慧商务AI助手平台
 
 基于Python的AI应用开发实训项目 —— 企业级AI智能应用平台
@@ -171,6 +173,7 @@ RAG流程: 文档上传 → 文本分割 → 向量嵌入 → Chroma存储 → �
 - **仪表盘**: `/dashboard` — KPI概览、趋势图、洞察
 - **语音**: `/voice` — 语音识别、语音合成
 - **智能体**: `/agent` — 单Agent对话、多Agent分析
+- **Dify**: `/dify` — 低代码AI平台集成（可选）
 
 ## 切换AI模式
 
@@ -188,9 +191,3 @@ DEEPSEEK_API_KEY=sk-your-actual-key
 ## 许可
 
 本实训项目仅用于教学目的。
-
-
-## 开始
-
-uvicorn app.main:app --reload --port 8000
-npm run dev
