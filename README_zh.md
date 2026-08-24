@@ -1,4 +1,4 @@
-[English](README.en.md) | **中文**
+[English](README.md) | **中文**
 
 # 东软智慧商务AI助手平台
 
