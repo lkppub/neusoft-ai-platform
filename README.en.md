@@ -93,28 +93,28 @@ Once the services are running, visit http://localhost.
 ## Feature Modules
 
 ### Enterprise User Side
-- 🤖 **AI Intelligent Chat Assistant**: Multi-turn conversation, SSE streaming output, context memory, Markdown rendering
-- 📚 **Knowledge Base Q&A**: RAG retrieval-augmented generation, document upload, Chroma vector storage, source citation
-- 🎤 **Voice Interaction**: Speech-to-text, text-to-speech
+- **AI Intelligent Chat Assistant**: Multi-turn conversation, SSE streaming output, context memory, Markdown rendering
+- **Knowledge Base Q&A**: RAG retrieval-augmented generation, document upload, Chroma vector storage, source citation
+- **Voice Interaction**: Speech-to-text, text-to-speech
 
 ### Customer Service Side
-- 📋 **Intelligent Ticket Management**: AI auto-categorization, AI reply suggestions, ticket status tracking
-- 📝 **FAQ Management**: Frequently asked questions maintenance, category management
-- 📄 **Reply Templates**: Template creation, variable substitution, one-click usage
+- **Intelligent Ticket Management**: AI auto-categorization, AI reply suggestions, ticket status tracking
+- **FAQ Management**: Frequently asked questions maintenance, category management
+- **Reply Templates**: Template creation, variable substitution, one-click usage
 
 ### Administrator Side
-- 👥 **User Management**: User CRUD, role assignment, permission control
-- 📁 **Knowledge Base Management**: Document upload, chunking configuration, index management
-- ⚙️ **AI Configuration Management**: Model selection, prompt template editing, parameter tuning
-- 📊 **Conversation Record Viewer**: Browse and stat all conversation records
-- 📈 **Intelligent Analysis Report**: AI-generated operations analysis report
+- **User Management**: User CRUD, role assignment, permission control
+- **Knowledge Base Management**: Document upload, chunking configuration, index management
+- **AI Configuration Management**: Model selection, prompt template editing, parameter tuning
+- **Conversation Record Viewer**: Browse and stat all conversation records
+- **Intelligent Analysis Report**: AI-generated operations analysis report
 
 ### Decision Maker Side (Data Dashboard)
-- 📊 **KPI Overview Cards**: Consultation volume, ticket volume, resolution rate, satisfaction
-- 🥧 **Category Distribution Pie Chart**: Issue type distribution
-- 📈 **Trend Line Chart**: Satisfaction and consultation volume trends
-- 💡 **AI Insight Cards**: AI auto-detects key trends
-- 🔥 **Hot Topics**: High-frequency FAQ keywords
+- **KPI Overview Cards**: Consultation volume, ticket volume, resolution rate, satisfaction
+- **Category Distribution Pie Chart**: Issue type distribution
+- **Trend Line Chart**: Satisfaction and consultation volume trends
+- **AI Insight Cards**: AI auto-detects key trends
+- **Hot Topics**: High-frequency FAQ keywords
 
 ## AI Architecture
 
